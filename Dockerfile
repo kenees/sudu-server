@@ -1,0 +1,61 @@
+# ========== 构建阶段 ==========
+# 使用官方 Rust 镜像，它支持多架构（arm64/amd64）
+# 指定版本号以保持可重现性，建议使用最新的稳定版
+FROM rust:1.88-slim-bookworm AS builder
+
+# 设置工作目录
+WORKDIR /usr/src/app
+
+# 安装构建依赖（如果需要 MySQL/OpenSSL）
+# pkg-config 和 libssl-dev 是编译许多 Rust 库所必需的
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        pkg-config \
+        libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖清单文件（利用 Docker 缓存，避免每次重新下载依赖）
+COPY Cargo.toml Cargo.lock ./
+
+# 创建一个虚拟的 main.rs，仅用于编译依赖项（缓存依赖层）
+RUN mkdir src && \
+    echo "fn main() {}" > src/main.rs && \
+    rustup target add x86_64-unknown-linux-gnu && \
+    cargo build --release --target x86_64-unknown-linux-gnu && \
+    rm -rf src
+
+# 复制真正的源代码并构建
+COPY . .
+RUN cargo build --release --target x86_64-unknown-linux-gnu
+
+# ========== 运行阶段 ==========
+# 使用精简的 Debian 镜像（支持多架构）
+FROM debian:bookworm-slim
+
+# 安装运行时动态库（OpenSSL 运行时库、MariaDB 客户端库，ca-certificates 用于 HTTPS）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libssl3 \
+        libmariadb3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 设置工作目录
+WORKDIR /app
+
+# 从构建阶段复制编译好的二进制文件
+COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-gnu/release/sudoku-server /app/
+
+# 如果服务需要配置文件，取消下面的注释并确保文件存在
+# COPY config.toml /app/
+
+# 声明运行时端口（仅作文档，不实际映射）
+EXPOSE 8080
+
+# 可选：设置默认环境变量（可在 docker run 或 compose 中覆盖）
+ENV RUST_LOG=info
+ENV HOST=0.0.0.0
+ENV PORT=8080
+
+# 运行服务
+CMD ["./sudoku-server"]
