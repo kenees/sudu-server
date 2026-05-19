@@ -16,7 +16,7 @@ PORT_MAP="$HOST_PORT:$CONTAINER_PORT"
 VOLUMES=""
 
 # 可选：环境变量，例如 RUST_LOG=info
-ENV_VARS="-e RUST_LOG=info -e WECHAT_APPID=wx1234567890abcdef -e WECHAT_SECRET=3395af4534cd03876fad6ebe0b5aa5a5"
+ENV_VARS="-e RUST_LOG=info -e WECHAT_APPID=wx51d5730ce049fe49 -e WECHAT_SECRET=3395af4534cd03876fad6ebe0b5aa5a5"
 
 # 可选：重启策略（always / unless-stopped / on-failure）
 RESTART_POLICY="--restart unless-stopped"
