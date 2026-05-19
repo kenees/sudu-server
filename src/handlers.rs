@@ -6,7 +6,7 @@ use std::env;
 
 use crate::models::{
     SaveGameRecordRequest, SaveGameRecordResponse, SearchPuzzlesRequest, UpdateProfileRequest,
-    UpdateProfileResponse, WeChatLoginRequest, WeChatLoginResponse,
+    UpdateProfileResponse, UserInfo, WeChatLoginRequest, WeChatLoginResponse,
 };
 
 const WECHAT_API_URL: &str = "https://api.weixin.qq.com/sns/jscode2session";
@@ -105,7 +105,27 @@ pub async fn wx_login(
         .await
         .ok()
         .flatten();
-    let (nick_name, avatar_url) = profile.unwrap_or((String::new(), String::new()));
+    let (
+        id,
+        openid,
+        nick_name,
+        avatar_url,
+        level,
+        finish_count,
+        average_time,
+        finish_max_difficulty,
+        experience,
+    ) = profile.unwrap_or((
+        -1,
+        String::new(),
+        String::new(),
+        String::new(),
+        1,
+        0,
+        0,
+        0,
+        0,
+    ));
 
     HttpResponse::Ok().json(WeChatLoginResponse {
         openid: openid.to_string(),
@@ -121,6 +141,12 @@ pub async fn wx_login(
         } else {
             Some(avatar_url)
         },
+        id,
+        level,
+        finish_count,
+        average_time,
+        finish_max_difficulty,
+        experience,
     })
 }
 
@@ -140,6 +166,67 @@ pub async fn update_profile(
             }))
         }
     }
+}
+
+// Return  total number , avg time, height level, myself records
+pub async fn get_user_info(
+    pool: web::Data<MySqlPool>,
+    query: web::Query<serde_json::Value>,
+) -> HttpResponse {
+    let openid = match query.get("openid").and_then(|v| v.as_str()) {
+        Some(o) => o.to_string(),
+        None => {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "openid is required"
+            }))
+        }
+    };
+
+    let profile = crate::db::get_user_profile(&pool, &openid)
+        .await
+        .ok()
+        .flatten();
+    let (
+        id,
+        openid,
+        nick_name,
+        avatar_url,
+        level,
+        finish_count,
+        average_time,
+        finish_max_difficulty,
+        experience,
+    ) = profile.unwrap_or((
+        -1,
+        String::new(),
+        String::new(),
+        String::new(),
+        1,
+        0,
+        0,
+        0,
+        0,
+    ));
+
+    HttpResponse::Ok().json(UserInfo {
+        openid: openid.to_string(),
+        nick_name: if nick_name.is_empty() {
+            None
+        } else {
+            Some(nick_name)
+        },
+        avatar_url: if avatar_url.is_empty() {
+            None
+        } else {
+            Some(avatar_url)
+        },
+        id,
+        level,
+        finish_count,
+        average_time,
+        finish_max_difficulty,
+        experience,
+    })
 }
 
 /// Health check endpoint
@@ -163,22 +250,12 @@ pub async fn get_daily_puzzles(
             let items: Vec<serde_json::Value> = puzzles
                 .iter()
                 .map(|(id, difficulty, avg_time, _, personal_time, completed)| {
-                    let diff_label = match difficulty {
-                        1..=3 => "简单",
-                        4..=6 => "中等",
-                        _ => "困难",
-                    };
-                    let time_min = avg_time / 60;
-                    let time_sec = avg_time % 60;
-                    let personal_time_str =
-                        personal_time.map(|sec| format!("{:02}:{:02}", sec / 60, sec % 60));
                     serde_json::json!({
                         "id": id,
-                        "title": format!("{} #{}", diff_label, id),
-                        "difficulty": diff_label,
-                        "time": format!("{:02}:{:02}", time_min, time_sec),
+                        "difficulty": difficulty,
+                        "time": avg_time,
                         "completed": completed,
-                        "personal_time": personal_time_str,
+                        "personal_time": personal_time,
                     })
                 })
                 .collect();
@@ -211,30 +288,31 @@ pub async fn search_puzzles(
 ) -> HttpResponse {
     let openid = body.openid.as_deref();
 
-    match crate::db::search_puzzles(&pool, body.id, body.level, openid).await {
+    match crate::db::search_puzzles(&pool, body.id, Some((body.level[0], body.level[1])), openid)
+        .await
+    {
         Ok(puzzles) => {
             let items: Vec<serde_json::Value> = puzzles
                 .iter()
-                .map(|(id, difficulty, avg_time, _, personal_time, completed)| {
-                    let diff_label = match difficulty {
-                        1..=3 => "简单",
-                        4..=6 => "中等",
-                        _ => "困难",
-                    };
-                    let time_min = avg_time / 60;
-                    let time_sec = avg_time % 60;
-                    let personal_time_str =
-                        personal_time.map(|sec| format!("{:02}:{:02}", sec / 60, sec % 60));
-                    serde_json::json!({
-                        "id": id,
-                        "title": format!("{} #{}", diff_label, id),
-                        "difficulty": diff_label,
-                        "level": difficulty,
-                        "time": format!("{:02}:{:02}", time_min, time_sec),
-                        "personal_time": personal_time_str,
-                        "completed": completed,
-                    })
-                })
+                .map(
+                    |(id, difficulty, average_solving_time, _, personal_time, completed)| {
+                        let diff_label = match difficulty {
+                            1..=3 => "简单",
+                            4..=6 => "中等",
+                            _ => "困难",
+                        };
+
+                        serde_json::json!({
+                            "id": id,
+                            "title": format!("{} #{}", diff_label, id),
+                            "difficulty_label": diff_label,
+                            "difficulty": difficulty,
+                            "time": average_solving_time,
+                            "personal_time": personal_time,
+                            "completed": completed,
+                        })
+                    },
+                )
                 .collect();
 
             HttpResponse::Ok().json(items)
@@ -296,11 +374,12 @@ pub async fn save_game_record(
     body: web::Json<SaveGameRecordRequest>,
 ) -> HttpResponse {
     log::info!(
-        "Saving game record: openid={}, puzzle_id={}, cell_values_len={}, elapsed={}",
+        "Saving game record: openid={}, puzzle_id={}, cell_values_len={}, elapsed={}, difficulty={}",
         body.openid,
         body.puzzle_id,
         body.cell_values.len(),
-        body.elapsed_seconds
+        body.elapsed_seconds,
+        body.difficulty,
     );
     log::info!("Cell values raw: {}", body.cell_values);
 
@@ -314,6 +393,8 @@ pub async fn save_game_record(
         body.elapsed_seconds,
         body.completed,
         disabled_hints_json,
+        body.difficulty,
+        body.exp,
     )
     .await
     {
@@ -367,19 +448,20 @@ pub async fn get_user_records(
                     4..=6 => "中等",
                     _ => "困难",
                 };
-                let time_min = elapsed / 60;
-                let time_sec = elapsed % 60;
+                // let time_min = elapsed / 60;
+                // let time_sec = elapsed % 60;
 
-                let avg_time_min = avg_time / 60;
-                let avg_time_sec = avg_time % 60;
+                // let avg_time_min = avg_time / 60;
+                // let avg_time_sec = avg_time % 60;
 
                 let entry = serde_json::json!({
                     "id": puzzle_id,
                     "record_id": record_id,
                     "title": format!("{} #{}", diff_label, puzzle_id),
-                    "difficulty": diff_label,
-                    "time": format!("{:02}:{:02}", avg_time_min, avg_time_sec),
-                    "personalTime": format!("{:02}:{:02}", time_min, time_sec),
+                    "difficulty_label": diff_label,
+                    "difficulty": difficulty,
+                    "time": avg_time,
+                    "personalTime": elapsed,
                     "completed": completed,
                 });
 
@@ -416,10 +498,8 @@ pub async fn get_game_record(
 
     match crate::db::get_game_record(&pool, &openid, puzzle_id).await {
         Ok(Some((_, _, difficulty, cell_values, elapsed, completed, _, disabled_hints))) => {
-            // Parse cell_values: stored as JSON with null for empty cells,
-            // e.g. "[null,[1],[2,3],null,...]"
             // Convert to Vec<Vec<Vec<i32>>> where null becomes []
-            let cell_values_grid = parse_cell_values(&cell_values);
+            // let cell_values_grid = parse_cell_values(&cell_values);
 
             // Parse disabled_hints
             let disabled_hints: Vec<i32> =
@@ -428,7 +508,7 @@ pub async fn get_game_record(
             HttpResponse::Ok().json(serde_json::json!({
                 "puzzle_id": puzzle_id,
                 "difficulty": difficulty,
-                "cell_values": cell_values_grid,
+                "cell_values": cell_values,
                 "elapsed_seconds": elapsed,
                 "completed": completed,
                 "disabled_hints": disabled_hints,

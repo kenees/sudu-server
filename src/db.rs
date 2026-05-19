@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::MySqlPool;
+use sqlx::{Executor, MySql, MySqlPool, Transaction};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CageCell {
@@ -27,7 +27,12 @@ pub async fn init_db(db_url: &str) -> Result<MySqlPool, sqlx::Error> {
             nick_name VARCHAR(255),
             avatar_url TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            level INT NOT NULL DEFAULT 1,
+            finish_count BIGINT NOT NULL DEFAULT 0,
+            average_time BIGINT NOT NULL DEFAULT 0,
+            finish_max_difficulty INT NOT NULL DEFAULT 0,
+            experience BIGINT NOT NULL DEFAULT 0
         )
         "#,
     )
@@ -90,17 +95,29 @@ pub async fn get_or_create_user(pool: &MySqlPool, openid: &str) -> Result<(), sq
 pub async fn get_user_profile(
     pool: &MySqlPool,
     openid: &str,
-) -> Result<Option<(String, String)>, sqlx::Error> {
-    let row: Option<(Option<String>, Option<String>)> = sqlx::query_as(
+) -> Result<Option<(i64, String, String, String, i64, i64, i64, i64, i64)>, sqlx::Error> {
+    let row: Option<(
+        i64,
+        Option<String>,
+        Option<String>, 
+        Option<String>,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+    )> = sqlx::query_as(
         r#"
-        SELECT nick_name, avatar_url FROM users WHERE openid = ?
+        SELECT id, openid, nick_name, avatar_url, level, finish_count, average_time, finish_max_difficulty, experience  FROM users WHERE openid = ?
         "#,
     )
     .bind(openid)
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|(nick, avatar)| (nick.unwrap_or_default(), avatar.unwrap_or_default())))
+    Ok(row.map(|(
+        id, openid, nick, avatar, level, finish_count, average_time, finish_max_difficulty, experience)| 
+        (id, openid.unwrap_or_default(), nick.unwrap_or_default(), avatar.unwrap_or_default(), level.unwrap_or_default(), finish_count.unwrap_or_default(), average_time.unwrap_or_default(), finish_max_difficulty.unwrap_or_default(), experience.unwrap_or_default())))
 }
 
 pub async fn update_user_profile(
@@ -245,7 +262,7 @@ pub async fn get_puzzle_detail(
 pub async fn search_puzzles(
     pool: &MySqlPool,
     puzzle_id: Option<i64>,
-    level: i32,
+    level: Option<(i32, i32)>,
     openid: Option<&str>,
 ) -> Result<Vec<(i64, i32, i64, String, Option<i64>, bool)>, sqlx::Error> {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -262,16 +279,29 @@ pub async fn search_puzzles(
         .bind(id)
         .bind(&today)
     } else {
-        sqlx::query_as::<_, (i64, i32, i64, String, String)>(
-            r#"
-            SELECT id, difficulty, average_solving_time, cages_json, COALESCE(answer_json, '') as answer_json
-            FROM puzzles
-            WHERE difficulty = ? AND DATE(created_at) <= ?
-            ORDER BY created_at DESC
-            "#,
-        )
-        .bind(level)
-        .bind(&today)
+        if let Some((min, max)) = level {
+            sqlx::query_as::<_, (i64, i32, i64, String, String)>(
+                r#"
+                SELECT id, difficulty, average_solving_time, cages_json, COALESCE(answer_json, '') as answer_json
+                FROM puzzles
+                WHERE difficulty BETWEEN ? AND ? 
+                    AND DATE(created_at) <= ?
+                ORDER BY created_at DESC
+                "#,
+            )
+            .bind(min)
+            .bind(max)
+            .bind(&today)
+        } else {
+            sqlx::query_as::<_, (i64, i32, i64, String, String)>(
+                  r#"
+                SELECT id, difficulty, average_solving_time, cages_json, COALESCE(answer_json, '') as answer_json
+                FROM puzzles
+                WHERE DATE(created_at) <= ?
+                ORDER BY created_at DESC
+                "#,
+            )
+        }
     };
 
     let rows: Vec<(i64, i32, i64, String, String)> = query.fetch_all(pool).await?;
@@ -317,14 +347,12 @@ pub async fn save_game_record(
     elapsed_seconds: i64,
     completed: bool,
     disabled_hints_json: &str,
+    difficulty: i64,
+    exp: i64,
 ) -> Result<i64, sqlx::Error> {
-    // Get puzzle difficulty
-    let difficulty: Option<i32> = sqlx::query_scalar("SELECT difficulty FROM puzzles WHERE id = ?")
-        .bind(puzzle_id)
-        .fetch_optional(pool)
-        .await?;
+    let mut tx: Transaction<'_, MySql> = pool.begin().await?;
 
-    // Check if record already exists for this user+puzzle
+    // 1. 查询是否存在记录（注意 &mut tx）
     let existing: Option<(i64,)> = sqlx::query_as(
         r#"
         SELECT id FROM game_records
@@ -334,10 +362,10 @@ pub async fn save_game_record(
     )
     .bind(openid)
     .bind(puzzle_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?;
 
-    match existing {
+    let record_id = match existing {
         Some((record_id,)) => {
             sqlx::query(
                 r#"
@@ -352,10 +380,9 @@ pub async fn save_game_record(
             .bind(difficulty)
             .bind(disabled_hints_json)
             .bind(record_id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
-
-            Ok(record_id)
+            record_id
         }
         None => {
             let result = sqlx::query(
@@ -371,12 +398,19 @@ pub async fn save_game_record(
             .bind(elapsed_seconds)
             .bind(completed)
             .bind(disabled_hints_json)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
-
-            Ok(result.last_insert_id() as i64)
+            result.last_insert_id() as i64
         }
+    };
+
+    if completed {
+        let experience_to_add = exp;
+        update_user_game_data(&mut tx, openid, elapsed_seconds, Some(difficulty as i32), experience_to_add).await?;
     }
+
+    tx.commit().await?;
+    Ok(record_id)
 }
 
 /// Get all game records for a user
@@ -460,4 +494,99 @@ pub async fn get_game_record(
     .await?;
 
     Ok(row)
+}
+
+
+
+/// 原子更新用户数据（无并发竞态条件，无编译错误）
+pub async fn update_user_game_data(
+    tx: &mut Transaction<'_, MySql>,
+    openid: &str,
+    elapsed_seconds: i64,
+    difficulty: Option<i32>,
+    experience_to_add: i64,
+) -> Result<(), sqlx::Error> {
+    let incoming_diff = difficulty.unwrap_or(0) as i64;
+
+    let user_row: Option<(i64, i64, i64, i64, i64)> = sqlx::query_as(
+        r#"
+        SELECT level, finish_count, average_time, finish_max_difficulty, experience
+        FROM users
+        WHERE openid = ?
+        FOR UPDATE
+        "#,
+    )
+    .bind(openid)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (new_level, new_experience) = if let Some((level, finish_count, average_time, finish_max_difficulty, experience)) = user_row {
+        let mut level = level;
+        let mut total_experience = experience + experience_to_add;
+
+        while total_experience >= 100 + level * 200 {
+            total_experience -= 100 + level * 200;
+            level += 1;
+        }
+
+        let new_finish_count = finish_count + 1;
+        let new_average_time = if finish_count == 0 {
+            elapsed_seconds
+        } else {
+            let total_time = (average_time as i128) * (finish_count as i128) + (elapsed_seconds as i128);
+            (total_time / (new_finish_count as i128)) as i64
+        };
+        let new_max_diff = std::cmp::max(finish_max_difficulty as i64, incoming_diff) as i64;
+
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET finish_count = ?, average_time = ?, finish_max_difficulty = ?, experience = ?, level = ?
+            WHERE openid = ?
+            "#,
+        )
+        .bind(new_finish_count)
+        .bind(new_average_time)
+        .bind(new_max_diff)
+        .bind(total_experience)
+        .bind(level)
+        .bind(openid)
+        .execute(&mut **tx)
+        .await?;
+
+        (level, total_experience)
+    } else {
+        let mut level = 1;
+        let mut total_experience = experience_to_add;
+
+        while total_experience >= 100 + level * 200 {
+            total_experience -= 100 + level * 200;
+            level += 1;
+        }
+
+        sqlx::query(
+            r#"
+            INSERT INTO users (openid, finish_count, average_time, finish_max_difficulty, experience, level)
+            VALUES (?, 1, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(openid)
+        .bind(elapsed_seconds)
+        .bind(incoming_diff)
+        .bind(total_experience)
+        .bind(level)
+        .execute(&mut **tx)
+        .await?;
+
+        (level, total_experience)
+    };
+
+    log::info!(
+        "Updated user {} after completion: level={}, experience={}",
+        openid,
+        new_level,
+        new_experience
+    );
+
+    Ok(())
 }

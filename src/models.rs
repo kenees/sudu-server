@@ -8,8 +8,14 @@ pub struct WeChatLoginRequest {
 
 #[derive(Debug, Serialize)]
 pub struct WeChatLoginResponse {
+    pub id: i64,
     pub openid: String,
     pub session_key: String,
+    pub level: i64,
+    pub finish_count: i64,
+    pub average_time: i64,
+    pub finish_max_difficulty: i64,
+    pub experience: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unionid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -26,6 +32,19 @@ pub struct User {
     pub avatar_url: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, FromRow, Serialize, Deserialize)]
+pub struct UserInfo {
+    pub id: i64,
+    pub openid: String,
+    pub nick_name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub level: i64,
+    pub finish_count: i64,
+    pub average_time: i64,
+    pub finish_max_difficulty: i64,
+    pub experience: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,7 +92,7 @@ pub struct PuzzleDetail {
 #[derive(Debug, Deserialize)]
 pub struct SearchPuzzlesRequest {
     pub id: Option<i64>,
-    pub level: i32,
+    pub level: [i32; 2],
     pub openid: Option<String>,
 }
 
@@ -86,6 +105,8 @@ pub struct SaveGameRecordRequest {
     pub cell_values: String, // JSON string of 9x9 array
     pub elapsed_seconds: i64,
     pub completed: bool,
+    pub difficulty: i64,
+    pub exp: i64,
     #[serde(default)]
     pub disabled_hints: Option<String>, // JSON string of array of cage ids
 }

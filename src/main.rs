@@ -64,6 +64,7 @@ async fn main() -> std::io::Result<()> {
                 "/api/user/profile",
                 web::post().to(handlers::update_profile),
             )
+            .route("/api/user/info", web::get().to(handlers::get_user_info))
             // Puzzles
             .route(
                 "/api/puzzles/daily/{date}",

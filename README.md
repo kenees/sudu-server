@@ -38,6 +38,8 @@ cargo run
 
 The server will start at `http://localhost:8080`.
 
+## Experience
+
 ## Docker Deployment
 
 ### Build and run with Docker Compose:
@@ -265,3 +267,330 @@ echo "Checking health..."
 echo "Deploy complete!"
 
 chmod +x /opt/sudu-game/deploy.sh
+
+{
+"0-0": {
+"answer": 8,
+"candidates": []
+},
+"0-1": {
+"answer": 2,
+"candidates": []
+},
+"0-2": {
+"answer": 1,
+"candidates": []
+},
+"0-3": {
+"answer": 7,
+"candidates": []
+},
+"0-4": {
+"answer": 4,
+"candidates": []
+},
+"0-5": {
+"answer": 3,
+"candidates": []
+},
+"0-6": {
+"answer": 6,
+"candidates": []
+},
+"0-7": {
+"answer": 5,
+"candidates": []
+},
+"0-8": {
+"answer": 9,
+"candidates": []
+},
+"1-0": {
+"answer": 3,
+"candidates": []
+},
+"1-1": {
+"answer": 4,
+"candidates": []
+},
+"1-2": {
+"answer": 5,
+"candidates": []
+},
+"1-3": {
+"answer": 6,
+"candidates": []
+},
+"1-4": {
+"answer": 8,
+"candidates": []
+},
+"1-5": {
+"answer": 9,
+"candidates": []
+},
+"1-6": {
+"answer": 2,
+"candidates": []
+},
+"1-7": {
+"answer": 1,
+"candidates": []
+},
+"1-8": {
+"answer": 7,
+"candidates": []
+},
+"2-0": {
+"answer": 7,
+"candidates": []
+},
+"2-1": {
+"answer": 9,
+"candidates": []
+},
+"2-2": {
+"answer": 6,
+"candidates": []
+},
+"2-3": {
+"answer": 5,
+"candidates": []
+},
+"2-4": {
+"answer": 1,
+"candidates": []
+},
+"2-5": {
+"answer": 2,
+"candidates": []
+},
+"2-6": {
+"answer": 3,
+"candidates": []
+},
+"2-7": {
+"answer": 8,
+"candidates": []
+},
+"2-8": {
+"answer": 4,
+"candidates": []
+},
+"3-0": {
+"answer": 9,
+"candidates": []
+},
+"3-1": {
+"answer": 8,
+"candidates": []
+},
+"3-2": {
+"answer": 4,
+"candidates": []
+},
+"3-3": {
+"answer": 1,
+"candidates": []
+},
+"3-4": {
+"answer": 5,
+"candidates": []
+},
+"3-5": {
+"answer": 6,
+"candidates": []
+},
+"3-6": {
+"answer": 7,
+"candidates": []
+},
+"3-7": {
+"answer": 2,
+"candidates": []
+},
+"3-8": {
+"answer": 3,
+"candidates": []
+},
+"4-0": {
+"answer": 2,
+"candidates": []
+},
+"4-1": {
+"answer": 6,
+"candidates": []
+},
+"4-2": {
+"answer": 3,
+"candidates": []
+},
+"4-3": {
+"answer": 9,
+"candidates": []
+},
+"4-4": {
+"answer": 7,
+"candidates": []
+},
+"4-5": {
+"answer": 8,
+"candidates": []
+},
+"4-6": {
+"answer": 1,
+"candidates": []
+},
+"4-7": {
+"answer": 4,
+"candidates": []
+},
+"4-8": {
+"answer": 5,
+"candidates": []
+},
+"5-0": {
+"answer": 1,
+"candidates": []
+},
+"5-1": {
+"answer": 5,
+"candidates": []
+},
+"5-2": {
+"answer": 7,
+"candidates": []
+},
+"5-3": {
+"answer": 3,
+"candidates": []
+},
+"5-4": {
+"answer": 2,
+"candidates": []
+},
+"5-5": {
+"answer": 4,
+"candidates": []
+},
+"5-6": {
+"answer": 8,
+"candidates": []
+},
+"5-7": {
+"answer": 9,
+"candidates": []
+},
+"5-8": {
+"answer": 6,
+"candidates": []
+},
+"6-0": {
+"answer": 5,
+"candidates": []
+},
+"6-1": {
+"answer": 7,
+"candidates": []
+},
+"6-2": {
+"answer": 2,
+"candidates": []
+},
+"6-3": {
+"answer": 4,
+"candidates": []
+},
+"6-4": {
+"answer": 3,
+"candidates": []
+},
+"6-5": {
+"answer": 1,
+"candidates": []
+},
+"6-6": {
+"answer": 9,
+"candidates": []
+},
+"6-7": {
+"answer": 6,
+"candidates": []
+},
+"6-8": {
+"answer": 8,
+"candidates": []
+},
+"7-0": {
+"answer": 6,
+"candidates": []
+},
+"7-1": {
+"answer": 3,
+"candidates": []
+},
+"7-2": {
+"answer": 8,
+"candidates": []
+},
+"7-3": {
+"answer": 2,
+"candidates": []
+},
+"7-4": {
+"answer": 9,
+"candidates": []
+},
+"7-5": {
+"answer": 5,
+"candidates": []
+},
+"7-6": {
+"answer": 4,
+"candidates": []
+},
+"7-7": {
+"answer": 7,
+"candidates": []
+},
+"7-8": {
+"answer": 1,
+"candidates": []
+},
+"8-0": {
+"answer": 4,
+"candidates": []
+},
+"8-1": {
+"answer": 1,
+"candidates": []
+},
+"8-2": {
+"answer": 9,
+"candidates": []
+},
+"8-3": {
+"answer": 8,
+"candidates": []
+},
+"8-4": {
+"answer": 6,
+"candidates": []
+},
+"8-5": {
+"answer": 7,
+"candidates": []
+},
+"8-6": {
+"answer": 5,
+"candidates": []
+},
+"8-7": {
+"answer": 3,
+"candidates": []
+},
+"8-8": {
+"answer": null,
+"candidates": []
+}
+}

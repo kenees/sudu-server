@@ -11,6 +11,12 @@ DROP TABLE IF EXISTS users;
 
 -- ============================================
 -- 1. Users Table
+-- level: 等级
+-- finish_count: 完成数量
+-- average_time: 平均时间
+-- finish_max_difficulty: 完成的最高等级
+-- experience: 当前等级经验值， 
+-- 升级采用平方增长模型 10 * level * level
 -- ============================================
 CREATE TABLE users (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -18,8 +24,19 @@ CREATE TABLE users (
     nick_name VARCHAR(255),
     avatar_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    level INT NOT NULL DEFAULT 1,
+    finish_count BIGINT NOT NULL DEFAULT 0,
+    average_time BIGINT NOT NULL DEFAULT 0,
+    finish_max_difficulty INT NOT NULL DEFAULT 0,
+    experience BIGINT NOT NULL DEFAULT 0
 );
+
+ALTER TABLE users ADD level INT NOT NULL DEFAULT 1;
+ALTER TABLE users ADD finish_count BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD average_time BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD finish_max_difficulty INT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD experience BIGINT NOT NULL DEFAULT 0;
 
 -- ============================================
 -- 2. Puzzles Table
