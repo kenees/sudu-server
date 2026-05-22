@@ -14,6 +14,13 @@ RUN apt-get update && \
         libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# 配置 cargo 国内镜像源（例如使用中科大源）
+RUN mkdir -p ~/.cargo && \
+    echo '[source.crates-io]' > ~/.cargo/config.toml && \
+    echo 'replace-with = "ustc"' >> ~/.cargo/config.toml && \
+    echo '[source.ustc]' >> ~/.cargo/config.toml && \
+    echo 'registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"' >> ~/.cargo/config.toml
+
 # 复制依赖清单文件（利用 Docker 缓存，避免每次重新下载依赖）
 COPY Cargo.toml Cargo.lock ./
 
