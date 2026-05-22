@@ -50,6 +50,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
+        curl \
         libssl3 \
         libmariadb3 \
     && rm -rf /var/lib/apt/lists/*
@@ -59,6 +60,8 @@ WORKDIR /app
 
 # 从构建阶段复制编译好的二进制文件
 COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-gnu/release/sudoku-server /app/
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 # 如果服务需要配置文件，取消下面的注释并确保文件存在
 # COPY config.toml /app/
@@ -72,5 +75,9 @@ ENV HOST=0.0.0.0
 ENV PORT=8080
 ENV RUST_BACKTRACE=1
 
+# Docker 自检，确保服务在 8080 端口健康运行
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/api/health || exit 1
+
 # 运行服务
-CMD ["./sudoku-server"]
+CMD ["./start.sh"]

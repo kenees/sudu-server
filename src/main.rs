@@ -58,7 +58,7 @@ async fn main() -> std::io::Result<()> {
         if let Ok(bt) = std::env::var("RUST_BACKTRACE") {
             if bt != "0" {
                 // Try to print a backtrace if available
-                eprintln!("Backtrace: {:#?}", backtrace::Backtrace::force_capture());
+                eprintln!("Backtrace: {:#?}", backtrace::Backtrace::new());
             }
         }
     }));
