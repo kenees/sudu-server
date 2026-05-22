@@ -56,6 +56,7 @@ EXPOSE 8080
 ENV RUST_LOG=info
 ENV HOST=0.0.0.0
 ENV PORT=8080
+ENV RUST_BACKTRACE=1
 
 # 运行服务
 CMD ["./sudoku-server"]

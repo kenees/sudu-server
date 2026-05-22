@@ -2,6 +2,8 @@ use actix_files::Files;
 use actix_web::{middleware::Logger, web, App, HttpServer};
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::panic;
+use std::process;
 
 mod db;
 mod handlers;
@@ -44,6 +46,23 @@ async fn main() -> std::io::Result<()> {
         db_url, host, port
     );
 
+    // Print PID and basic process info to help container debugging
+    eprintln!("PID={}, PPID={}", process::id(), std::process::id());
+
+    // Install panic hook to ensure panics are logged to stderr (docker logs)
+    panic::set_hook(Box::new(|panic_info| {
+        eprintln!("PANIC captured: {}", panic_info);
+        if let Some(location) = panic_info.location() {
+            eprintln!("Panic at {}:{}", location.file(), location.line());
+        }
+        if let Ok(bt) = std::env::var("RUST_BACKTRACE") {
+            if bt != "0" {
+                // Try to print a backtrace if available
+                eprintln!("Backtrace: {:#?}", backtrace::Backtrace::force_capture());
+            }
+        }
+    }));
+
     // Initialize database
     let pool = db::init_db(&db_url).await.unwrap_or_else(|e| {
         eprintln!("Failed to initialize database: {}", e);
@@ -55,7 +74,8 @@ async fn main() -> std::io::Result<()> {
         host, port
     );
 
-    HttpServer::new(move || {
+    log::info!("Creating HttpServer instance");
+    let server = HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
             .app_data(web::Data::new(pool.clone()))
@@ -99,7 +119,22 @@ async fn main() -> std::io::Result<()> {
             .service(Files::new("/static", "./static").show_files_listing())
         // System web
     })
-    .bind(format!("{}:{}", host, port))?
-    .run()
-    .await
+    .bind(format!("{}:{}", host, port));
+
+    match server {
+        Ok(srv) => {
+            log::info!("Server bound to {}:{}", host, port);
+            if let Err(e) = srv.run().await {
+                log::error!("HttpServer run error: {}", e);
+                eprintln!("HttpServer run error: {}", e);
+                return Err(e);
+            }
+            Ok(())
+        }
+        Err(e) => {
+            log::error!("Failed to bind server: {}", e);
+            eprintln!("Failed to bind server: {}", e);
+            Err(e)
+        }
+    }
 }
