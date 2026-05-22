@@ -1,4 +1,7 @@
 # ========== 构建阶段 ==========
+# 在 Dockerfile 开头启用 BuildKit
+# syntax=docker/dockerfile:1.4
+
 # 使用官方 Rust 镜像，它支持多架构（arm64/amd64）
 # 指定版本号以保持可重现性，建议使用最新的稳定版
 FROM rust:1.88-slim-bookworm AS builder
@@ -15,11 +18,15 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # 配置 cargo 国内镜像源（例如使用中科大源）
-RUN mkdir -p ~/.cargo && \
-    echo '[source.crates-io]' > ~/.cargo/config.toml && \
-    echo 'replace-with = "ustc"' >> ~/.cargo/config.toml && \
-    echo '[source.ustc]' >> ~/.cargo/config.toml && \
-    echo 'registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"' >> ~/.cargo/config.toml
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/usr/src/app/target \
+    set -e && \
+    mkdir -p $CARGO_HOME && \
+    echo '[source.crates-io]' > $CARGO_HOME/config.toml && \
+    echo 'replace-with = "ustc"' >> $CARGO_HOME/config.toml && \
+    echo '[source.ustc]' >> $CARGO_HOME/config.toml && \
+    echo 'registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"' >> $CARGO_HOME/config.toml
 
 # 复制依赖清单文件（利用 Docker 缓存，避免每次重新下载依赖）
 COPY Cargo.toml Cargo.lock ./
