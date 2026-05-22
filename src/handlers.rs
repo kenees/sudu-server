@@ -1,5 +1,8 @@
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
+use chrono::Utc;
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::MySqlPool;
 use std::env;
@@ -10,6 +13,79 @@ use crate::models::{
 };
 
 const WECHAT_API_URL: &str = "https://api.weixin.qq.com/sns/jscode2session";
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthClaims {
+    pub openid: String,
+    pub session_key: String,
+    pub exp: usize,
+}
+
+fn jwt_secret() -> String {
+    env::var("JWT_SECRET").unwrap_or_else(|_| "sudoku_jwt_secret_change_me".to_string())
+}
+
+fn token_ttl_seconds() -> usize {
+    env::var("SESSION_TOKEN_TTL_SECONDS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(7200)
+}
+
+pub fn create_auth_token(
+    openid: &str,
+    session_key: &str,
+) -> Result<String, jsonwebtoken::errors::Error> {
+    let now = Utc::now().timestamp() as usize;
+    let claims = AuthClaims {
+        openid: openid.to_owned(),
+        session_key: session_key.to_owned(),
+        exp: now + token_ttl_seconds(),
+    };
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(jwt_secret().as_bytes()),
+    )
+}
+
+pub fn validate_auth_token(token: &str) -> Result<AuthClaims, jsonwebtoken::errors::Error> {
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.validate_exp = true;
+    decode::<AuthClaims>(
+        token,
+        &DecodingKey::from_secret(jwt_secret().as_bytes()),
+        &validation,
+    )
+    .map(|data| data.claims)
+}
+
+fn auth_openid_from_header(req: &HttpRequest) -> Result<String, HttpResponse> {
+    let token = match req
+        .headers()
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+    {
+        Some(t) => t.to_string(),
+        None => {
+            return Err(HttpResponse::Unauthorized().json(serde_json::json!({
+                "error": "Authorization header required",
+            })));
+        }
+    };
+
+    match validate_auth_token(&token) {
+        Ok(claims) => Ok(claims.openid),
+        Err(_) => Err(HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "Invalid or expired token",
+        }))),
+    }
+}
+
+fn require_auth_openid(req: &HttpRequest) -> Result<String, HttpResponse> {
+    auth_openid_from_header(req)
+}
 
 /// WeChat mini-program login endpoint
 /// Exchanges wx.login() code for openid and session_key
@@ -100,6 +176,16 @@ pub async fn wx_login(
         }));
     }
 
+    let token = match create_auth_token(openid, session_key) {
+        Ok(t) => t,
+        Err(e) => {
+            log::error!("Failed to create auth token: {}", e);
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to create auth token"
+            }));
+        }
+    };
+
     // Fetch user profile
     let profile = crate::db::get_user_profile(&pool, openid)
         .await
@@ -129,7 +215,7 @@ pub async fn wx_login(
 
     HttpResponse::Ok().json(WeChatLoginResponse {
         openid: openid.to_string(),
-        session_key: session_key.to_string(),
+        token,
         unionid: unionid.map(|s| s.to_string()),
         nick_name: if nick_name.is_empty() {
             None
@@ -152,9 +238,21 @@ pub async fn wx_login(
 
 /// Update user profile (nickname, avatar)
 pub async fn update_profile(
+    req: HttpRequest,
     pool: web::Data<MySqlPool>,
     body: web::Json<UpdateProfileRequest>,
 ) -> HttpResponse {
+    let token_openid = match require_auth_openid(&req) {
+        Ok(openid) => openid,
+        Err(resp) => return resp,
+    };
+
+    if token_openid != body.openid {
+        return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "openid mismatch"
+        }));
+    }
+
     match crate::db::update_user_profile(&pool, &body.openid, &body.nick_name, &body.avatar_url)
         .await
     {
@@ -170,17 +268,25 @@ pub async fn update_profile(
 
 // Return  total number , avg time, height level, myself records
 pub async fn get_user_info(
+    req: HttpRequest,
     pool: web::Data<MySqlPool>,
     query: web::Query<serde_json::Value>,
 ) -> HttpResponse {
+    let token_openid = match require_auth_openid(&req) {
+        Ok(openid) => openid,
+        Err(resp) => return resp,
+    };
+
     let openid = match query.get("openid").and_then(|v| v.as_str()) {
         Some(o) => o.to_string(),
-        None => {
-            return HttpResponse::BadRequest().json(serde_json::json!({
-                "error": "openid is required"
-            }))
-        }
+        None => token_openid.clone(),
     };
+
+    if token_openid != openid {
+        return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "openid mismatch"
+        }));
+    }
 
     let profile = crate::db::get_user_profile(&pool, &openid)
         .await
@@ -238,12 +344,30 @@ pub async fn health_check() -> HttpResponse {
 
 /// Get daily puzzles for a specific date
 pub async fn get_daily_puzzles(
+    req: HttpRequest,
     pool: web::Data<MySqlPool>,
     path: web::Path<String>,
     query: web::Query<serde_json::Value>,
 ) -> HttpResponse {
     let date = path.into_inner();
-    let openid = query.get("openid").and_then(|v| v.as_str());
+    let token_openid = match auth_openid_from_header(&req) {
+        Ok(v) => Some(v),
+        Err(resp) => return resp,
+    };
+    let openid = query
+        .get("openid")
+        .and_then(|v| v.as_str())
+        .or_else(|| token_openid.as_deref());
+
+    if let Some(query_openid) = query.get("openid").and_then(|v| v.as_str()) {
+        if let Some(token_openid) = token_openid.as_deref() {
+            if query_openid != token_openid {
+                return HttpResponse::Unauthorized().json(serde_json::json!({
+                    "error": "openid mismatch"
+                }));
+            }
+        }
+    }
 
     match crate::db::get_daily_puzzles(&pool, &date, openid).await {
         Ok(puzzles) => {
@@ -273,20 +397,34 @@ pub async fn get_daily_puzzles(
 
 /// Get history puzzles for a specific date
 pub async fn get_history_puzzles(
+    req: HttpRequest,
     pool: web::Data<MySqlPool>,
     path: web::Path<String>,
     query: web::Query<serde_json::Value>,
 ) -> HttpResponse {
     // Same as daily - puzzles for a specific date
-    get_daily_puzzles(pool, path, query).await
+    get_daily_puzzles(req, pool, path, query).await
 }
 
 /// Search puzzles by id (optional) and level (required)
 pub async fn search_puzzles(
+    req: HttpRequest,
     pool: web::Data<MySqlPool>,
     body: web::Json<SearchPuzzlesRequest>,
 ) -> HttpResponse {
-    let openid = body.openid.as_deref();
+    let token_openid = match require_auth_openid(&req) {
+        Ok(openid) => openid,
+        Err(resp) => return resp,
+    };
+    let openid = match body.openid.as_deref() {
+        Some(o) if o != token_openid => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({
+                "error": "openid mismatch"
+            }));
+        }
+        Some(_) => Some(token_openid.as_str()),
+        None => Some(token_openid.as_str()),
+    };
 
     match crate::db::search_puzzles(&pool, body.id, Some((body.level[0], body.level[1])), openid)
         .await
@@ -370,9 +508,21 @@ pub async fn get_puzzle_detail(pool: web::Data<MySqlPool>, path: web::Path<i64>)
 
 /// Save game state (cell values, elapsed time, completed status)
 pub async fn save_game_record(
+    req: HttpRequest,
     pool: web::Data<MySqlPool>,
     body: web::Json<SaveGameRecordRequest>,
 ) -> HttpResponse {
+    let token_openid = match require_auth_openid(&req) {
+        Ok(openid) => openid,
+        Err(resp) => return resp,
+    };
+
+    if token_openid != body.openid {
+        return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "openid mismatch"
+        }));
+    }
+
     log::info!(
         "Saving game record: openid={}, puzzle_id={}, cell_values_len={}, elapsed={}, difficulty={}",
         body.openid,
@@ -413,16 +563,23 @@ pub async fn save_game_record(
 
 /// Get user's game records
 pub async fn get_user_records(
+    req: HttpRequest,
     pool: web::Data<MySqlPool>,
     query: web::Query<serde_json::Value>,
 ) -> HttpResponse {
+    let token_openid = match require_auth_openid(&req) {
+        Ok(openid) => openid,
+        Err(resp) => return resp,
+    };
+
     let openid = match query.get("openid").and_then(|v| v.as_str()) {
-        Some(o) => o.to_string(),
-        None => {
-            return HttpResponse::BadRequest().json(serde_json::json!({
-                "error": "openid is required"
-            }))
+        Some(o) if o != token_openid => {
+            return HttpResponse::Unauthorized().json(serde_json::json!({
+                "error": "openid mismatch"
+            }));
         }
+        Some(_) => token_openid.clone(),
+        None => token_openid.clone(),
     };
 
     match crate::db::get_user_records(&pool, &openid).await {
@@ -491,10 +648,21 @@ pub async fn get_user_records(
 
 /// Get game record for resuming a game
 pub async fn get_game_record(
+    req: HttpRequest,
     pool: web::Data<MySqlPool>,
     path: web::Path<(String, i64)>,
 ) -> HttpResponse {
+    let token_openid = match require_auth_openid(&req) {
+        Ok(openid) => openid,
+        Err(resp) => return resp,
+    };
+
     let (openid, puzzle_id) = path.into_inner();
+    if token_openid != openid {
+        return HttpResponse::Unauthorized().json(serde_json::json!({
+            "error": "openid mismatch"
+        }));
+    }
 
     match crate::db::get_game_record(&pool, &openid, puzzle_id).await {
         Ok(Some((_, _, difficulty, cell_values, elapsed, completed, _, disabled_hints))) => {

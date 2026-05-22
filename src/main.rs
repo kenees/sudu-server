@@ -1,4 +1,5 @@
-use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
+use actix_files::Files;
+use actix_web::{middleware::Logger, web, App, HttpServer};
 use serde::{Deserialize, Serialize};
 use std::env;
 
@@ -94,6 +95,9 @@ async fn main() -> std::io::Result<()> {
             )
             // Health
             .route("/api/health", web::get().to(handlers::health_check))
+            // Static files
+            .service(Files::new("/static", "./static").show_files_listing())
+        // System web
     })
     .bind(format!("{}:{}", host, port))?
     .run()

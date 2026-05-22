@@ -10,7 +10,7 @@ pub struct WeChatLoginRequest {
 pub struct WeChatLoginResponse {
     pub id: i64,
     pub openid: String,
-    pub session_key: String,
+    pub token: String,
     pub level: i64,
     pub finish_count: i64,
     pub average_time: i64,
