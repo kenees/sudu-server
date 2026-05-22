@@ -87,6 +87,20 @@ pub struct PuzzleDetail {
     pub average_solving_time: i64,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreatePuzzleRequest {
+    pub difficulty: i32,
+    pub average_solving_time: Option<i64>,
+    pub cages_json: String,
+    pub answer_json: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreatePuzzleResponse {
+    pub success: bool,
+    pub puzzle_id: i64,
+}
+
 // ==================== Search request ====================
 
 #[derive(Debug, Deserialize)]

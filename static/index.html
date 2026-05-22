@@ -1,11 +1,262 @@
 <!doctype html>
-<html>
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <title>Sudoku Server Static</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>数独题目录入</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 16px;
+        line-height: 1.5;
+        color: #222;
+      }
+      h1 {
+        margin-bottom: 0.4rem;
+      }
+      label {
+        display: block;
+        margin: 8px 0 4px;
+      }
+      input,
+      textarea,
+      select {
+        width: 100%;
+        max-width: 560px;
+        box-sizing: border-box;
+        padding: 8px;
+        border: 1px solid #bbb;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      .grid table {
+        border-collapse: collapse;
+        margin: 8px 0 16px;
+      }
+      .grid td {
+        border: 1px solid #888;
+        padding: 0;
+        width: 34px;
+        height: 34px;
+      }
+      .grid input {
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        text-align: center;
+        border: none;
+        outline: none;
+        font-size: 16px;
+      }
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 12px 0;
+      }
+      button {
+        padding: 10px 16px;
+        background: #337ab7;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #286090;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #f7f7f7;
+        padding: 10px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+      }
+      #status {
+        margin-top: 16px;
+      }
+      .small {
+        font-size: 0.9rem;
+        color: #555;
+      }
+    </style>
   </head>
   <body>
-    <h1>Sudoku Server Static Files</h1>
-    <p>If you see this page, static file serving works.</p>
+    <h1>数独题目录入</h1>
+    <p>请在下方输入数独题目数据，然后保存到数据库。</p>
+
+    <label for="difficulty">难度（1-9）</label>
+    <input id="difficulty" type="number" min="1" max="9" value="1" />
+
+    <label for="average_solving_time">平均解题耗时（秒，可选）</label>
+    <input id="average_solving_time" type="number" min="0" value="0" />
+
+    <div class="grid">
+      <label>答案网格（空格表示未填）</label>
+      <table id="answer-grid"></table>
+      <button type="button" id="fill-answer-json">
+        同步答案到 Answer JSON
+      </button>
+    </div>
+
+    <label for="answer_json"
+      >Answer JSON（81 个数字数组，例如 [1,2,3,...]）</label
+    >
+    <textarea id="answer_json" rows="4" placeholder="可留空"></textarea>
+
+    <label for="cages_json">笼子数据 JSON</label>
+    <textarea
+      id="cages_json"
+      rows="8"
+      placeholder='[{"id":1,"sum":23,"cells":[{"row":0,"col":0},{"row":0,"col":1}]}]'
+    ></textarea>
+    <p class="small">笼子数据必须是有效 JSON，cells 使用 row/col 位置。</p>
+
+    <div class="button-row">
+      <button type="button" id="submit-button">保存题目</button>
+      <button type="button" id="reset-button">重置表单</button>
+    </div>
+
+    <div id="status"></div>
+
+    <script>
+      const gridTable = document.getElementById("answer-grid");
+      const answerJsonInput = document.getElementById("answer_json");
+      const statusEl = document.getElementById("status");
+
+      function createGrid() {
+        for (let r = 0; r < 9; r += 1) {
+          const row = document.createElement("tr");
+          for (let c = 0; c < 9; c += 1) {
+            const cell = document.createElement("td");
+            const input = document.createElement("input");
+            input.type = "text";
+            input.maxLength = 1;
+            input.dataset.row = String(r);
+            input.dataset.col = String(c);
+            input.addEventListener("input", () => {
+              input.value = input.value.replace(/[^1-9]/g, "");
+            });
+            cell.appendChild(input);
+            row.appendChild(cell);
+          }
+          gridTable.appendChild(row);
+        }
+      }
+
+      function readGridAnswer() {
+        const values = [];
+        const inputs = gridTable.querySelectorAll("input");
+        inputs.forEach((input) => {
+          const text = input.value.trim();
+          if (!text) {
+            values.push(0);
+          } else {
+            values.push(Number(text));
+          }
+        });
+        return values;
+      }
+
+      function setStatus(message, isError = false) {
+        statusEl.textContent = message;
+        statusEl.style.color = isError ? "crimson" : "green";
+      }
+
+      document
+        .getElementById("fill-answer-json")
+        .addEventListener("click", () => {
+          const values = readGridAnswer();
+          answerJsonInput.value = JSON.stringify(values);
+          setStatus("已同步答案到 Answer JSON。");
+        });
+
+      document.getElementById("reset-button").addEventListener("click", () => {
+        document.getElementById("difficulty").value = "1";
+        document.getElementById("average_solving_time").value = "0";
+        answerJsonInput.value = "";
+        document.getElementById("cages_json").value = "";
+        gridTable
+          .querySelectorAll("input")
+          .forEach((input) => (input.value = ""));
+        setStatus("表单已重置。", false);
+      });
+
+      async function submitPuzzle() {
+        const difficulty =
+          Number(document.getElementById("difficulty").value) || 1;
+        const average_solving_time =
+          Number(document.getElementById("average_solving_time").value) || 0;
+        const cages_json = document.getElementById("cages_json").value.trim();
+        const answer_json =
+          document.getElementById("answer_json").value.trim() || null;
+
+        if (!cages_json) {
+          setStatus("请填写笼子数据 JSON。", true);
+          return;
+        }
+
+        let parsedCages;
+        try {
+          parsedCages = JSON.parse(cages_json);
+        } catch (err) {
+          setStatus("笼子 JSON 格式错误：" + err.message, true);
+          return;
+        }
+
+        if (!Array.isArray(parsedCages)) {
+          setStatus("笼子数据必须是数组。", true);
+          return;
+        }
+
+        if (answer_json) {
+          try {
+            const parsedAnswer = JSON.parse(answer_json);
+            if (!Array.isArray(parsedAnswer) || parsedAnswer.length !== 81) {
+              setStatus("Answer JSON 必须是长度为 81 的数组。", true);
+              return;
+            }
+          } catch (err) {
+            setStatus("Answer JSON 格式错误：" + err.message, true);
+            return;
+          }
+        }
+
+        const payload = {
+          difficulty,
+          average_solving_time,
+          cages_json: JSON.stringify(parsedCages),
+          answer_json: answer_json ? answer_json : null,
+        };
+
+        setStatus("正在保存，请稍候...");
+
+        try {
+          const resp = await fetch("/api/puzzles/create", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const data = await resp.json();
+          if (!resp.ok) {
+            throw new Error(data.error || "保存失败");
+          }
+
+          setStatus("保存成功，题目 ID：" + data.puzzle_id);
+        } catch (err) {
+          setStatus("保存失败：" + err.message, true);
+        }
+      }
+
+      document
+        .getElementById("submit-button")
+        .addEventListener("click", submitPuzzle);
+
+      createGrid();
+    </script>
   </body>
 </html>

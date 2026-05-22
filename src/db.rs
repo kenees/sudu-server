@@ -218,6 +218,29 @@ pub async fn get_daily_puzzles(
 }
 
 /// Get puzzle detail with cages
+pub async fn insert_puzzle(
+    pool: &MySqlPool,
+    difficulty: i32,
+    cages_json: &str,
+    answer_json: Option<&str>,
+    average_solving_time: i64,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        r#"
+        INSERT INTO puzzles (difficulty, average_solving_time, cages_json, answer_json)
+        VALUES (?, ?, ?, ?)
+        "#,
+    )
+    .bind(difficulty)
+    .bind(average_solving_time)
+    .bind(cages_json)
+    .bind(answer_json)
+    .execute(pool)
+    .await?;
+
+    Ok(result.last_insert_id() as i64)
+}
+
 pub async fn get_puzzle_detail(
     pool: &MySqlPool,
     puzzle_id: i64,

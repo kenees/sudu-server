@@ -8,8 +8,9 @@ use sqlx::MySqlPool;
 use std::env;
 
 use crate::models::{
-    SaveGameRecordRequest, SaveGameRecordResponse, SearchPuzzlesRequest, UpdateProfileRequest,
-    UpdateProfileResponse, UserInfo, WeChatLoginRequest, WeChatLoginResponse,
+    CreatePuzzleRequest, CreatePuzzleResponse, SaveGameRecordRequest, SaveGameRecordResponse,
+    SearchPuzzlesRequest, UpdateProfileRequest, UpdateProfileResponse, UserInfo,
+    WeChatLoginRequest, WeChatLoginResponse,
 };
 
 const WECHAT_API_URL: &str = "https://api.weixin.qq.com/sns/jscode2session";
@@ -234,6 +235,36 @@ pub async fn wx_login(
         finish_max_difficulty,
         experience,
     })
+}
+
+/// Create a new puzzle entry from the web editor
+pub async fn create_puzzle(
+    pool: web::Data<MySqlPool>,
+    body: web::Json<CreatePuzzleRequest>,
+) -> HttpResponse {
+    let average_solving_time = body.average_solving_time.unwrap_or(0);
+    let answer_json = body.answer_json.as_deref();
+
+    match crate::db::insert_puzzle(
+        &pool,
+        body.difficulty,
+        &body.cages_json,
+        answer_json,
+        average_solving_time,
+    )
+    .await
+    {
+        Ok(puzzle_id) => HttpResponse::Ok().json(CreatePuzzleResponse {
+            success: true,
+            puzzle_id,
+        }),
+        Err(e) => {
+            log::error!("Failed to insert puzzle: {}", e);
+            HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to insert puzzle"
+            }))
+        }
+    }
 }
 
 /// Update user profile (nickname, avatar)

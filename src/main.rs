@@ -103,6 +103,10 @@ async fn main() -> std::io::Result<()> {
                 "/api/puzzles/{id}",
                 web::get().to(handlers::get_puzzle_detail),
             )
+            .route(
+                "/api/puzzles/create",
+                web::post().to(handlers::create_puzzle),
+            )
             // Game records
             .route(
                 "/api/records/save",
@@ -116,7 +120,7 @@ async fn main() -> std::io::Result<()> {
             // Health
             .route("/api/health", web::get().to(handlers::health_check))
             // Static files
-            .service(Files::new("/static", "./static").show_files_listing())
+            .service(Files::new("/api/static", "./static").show_files_listing())
         // System web
     })
     .bind(format!("{}:{}", host, port));
