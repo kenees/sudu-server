@@ -37,7 +37,7 @@ fi
 
 # 3. 构建 Docker 镜像
 echo ">>> 构建 Docker 镜像 $IMAGE_NAME:latest ..."
-docker build -t "$IMAGE_NAME:latest" .
+DOCKER_BUILDKIT=1 docker build -t "$IMAGE_NAME:latest" .
 
 # 可选：同时打一个时间戳标签，便于回滚
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)

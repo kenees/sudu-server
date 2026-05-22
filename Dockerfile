@@ -9,24 +9,24 @@ FROM rust:1.88-slim-bookworm AS builder
 # 设置工作目录
 WORKDIR /usr/src/app
 
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
 # 安装构建依赖（如果需要 MySQL/OpenSSL）
 # pkg-config 和 libssl-dev 是编译许多 Rust 库所必需的
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        pkg-config \
-        libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+         apt-get install -y --no-install-recommends \
+         pkg-config \
+         libssl-dev \
+     && rm -rf /var/lib/apt/lists/*
 
-# 配置 cargo 国内镜像源（例如使用中科大源）
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/usr/src/app/target \
-    set -e && \
-    mkdir -p $CARGO_HOME && \
+# 配置 cargo 源（不需要挂载缓存）
+RUN mkdir -p $CARGO_HOME && \
     echo '[source.crates-io]' > $CARGO_HOME/config.toml && \
     echo 'replace-with = "ustc"' >> $CARGO_HOME/config.toml && \
     echo '[source.ustc]' >> $CARGO_HOME/config.toml && \
     echo 'registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"' >> $CARGO_HOME/config.toml
+
+COPY Cargo.toml Cargo.lock ./
 
 # 复制依赖清单文件（利用 Docker 缓存，避免每次重新下载依赖）
 COPY Cargo.toml Cargo.lock ./
