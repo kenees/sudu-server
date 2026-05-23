@@ -640,6 +640,7 @@
           id: cage.id,
           sum: cage.sum,
           cells: cage.cells,
+          inner: [],
         }));
         const cages_json = JSON.stringify(cages_for_submit);
 
@@ -655,13 +656,16 @@
         setStatus("正在保存，请稍候...");
 
         try {
-          const resp = await fetch("/api/puzzles/create", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
+          const resp = await fetch(
+            "https://www.chengzi.run/api/puzzles/create",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(payload),
             },
-            body: JSON.stringify(payload),
-          });
+          );
 
           const data = await resp.json();
           if (!resp.ok) {
@@ -674,7 +678,7 @@
 
           // 可选：清空表单
           setTimeout(() => {
-            document.getElementById("reset-all-button").click();
+            //document.getElementById("reset-all-button").click();
           }, 2000);
         } catch (err) {
           setStatus("保存失败：" + err.message, true);
