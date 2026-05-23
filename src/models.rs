@@ -91,6 +91,7 @@ pub struct PuzzleDetail {
 pub struct CreatePuzzleRequest {
     pub difficulty: i32,
     pub average_solving_time: Option<i64>,
+    pub created_at: Option<String>,
     pub cages_json: String,
     pub answer_json: Option<String>,
 }

@@ -1,5 +1,5 @@
 use actix_web::{web, HttpRequest, HttpResponse};
-use chrono::Utc;
+use chrono::{NaiveDateTime, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -244,6 +244,22 @@ pub async fn create_puzzle(
 ) -> HttpResponse {
     let average_solving_time = body.average_solving_time.unwrap_or(0);
     let answer_json = body.answer_json.as_deref();
+    let created_at = match body.created_at.as_deref() {
+        Some(value) if !value.trim().is_empty() => {
+            match NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M")
+                .or_else(|_| NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S"))
+                .or_else(|_| NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M"))
+            {
+                Ok(dt) => Some(dt),
+                Err(_) => {
+                    return HttpResponse::BadRequest().json(serde_json::json!({
+                        "error": "created_at 格式错误，请使用 YYYY-MM-DDTHH:MM 或 YYYY-MM-DD HH:MM:SS"
+                    }));
+                }
+            }
+        }
+        _ => None,
+    };
 
     match crate::db::insert_puzzle(
         &pool,
@@ -251,6 +267,7 @@ pub async fn create_puzzle(
         &body.cages_json,
         answer_json,
         average_solving_time,
+        created_at,
     )
     .await
     {

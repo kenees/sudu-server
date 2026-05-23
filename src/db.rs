@@ -1,5 +1,6 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use sqlx::{Executor, MySql, MySqlPool, Transaction};
+use sqlx::{MySql, MySqlPool, Transaction};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CageCell {
@@ -224,21 +225,40 @@ pub async fn insert_puzzle(
     cages_json: &str,
     answer_json: Option<&str>,
     average_solving_time: i64,
+    created_at: Option<NaiveDateTime>,
 ) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query(
-        r#"
-        INSERT INTO puzzles (difficulty, average_solving_time, cages_json, answer_json)
-        VALUES (?, ?, ?, ?)
-        "#,
-    )
-    .bind(difficulty)
-    .bind(average_solving_time)
-    .bind(cages_json)
-    .bind(answer_json)
-    .execute(pool)
-    .await?;
+    if let Some(created_at_value) = created_at {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO puzzles (difficulty, average_solving_time, cages_json, answer_json, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(difficulty)
+        .bind(average_solving_time)
+        .bind(cages_json)
+        .bind(answer_json)
+        .bind(created_at_value)
+        .execute(pool)
+        .await?;
 
-    Ok(result.last_insert_id() as i64)
+        Ok(result.last_insert_id() as i64)
+    } else {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO puzzles (difficulty, average_solving_time, cages_json, answer_json)
+            VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(difficulty)
+        .bind(average_solving_time)
+        .bind(cages_json)
+        .bind(answer_json)
+        .execute(pool)
+        .await?;
+
+        Ok(result.last_insert_id() as i64)
+    }
 }
 
 pub async fn get_puzzle_detail(

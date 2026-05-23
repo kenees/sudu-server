@@ -3,21 +3,36 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>数独题目录入</title>
+    <title>数独题目生成器</title>
     <style>
+      * {
+        box-sizing: border-box;
+      }
+
       body {
         font-family: Arial, sans-serif;
         margin: 16px;
         line-height: 1.5;
         color: #222;
+        background: #f9f9f9;
       }
+
       h1 {
         margin-bottom: 0.4rem;
       }
+
+      h2 {
+        margin: 24px 0 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #337ab7;
+      }
+
       label {
         display: block;
         margin: 8px 0 4px;
+        font-weight: 500;
       }
+
       input,
       textarea,
       select {
@@ -29,17 +44,24 @@
         border-radius: 4px;
         font-size: 14px;
       }
-      .grid table {
+
+      /* 答案网格 */
+      .answer-grid table,
+      .cage-grid table {
         border-collapse: collapse;
-        margin: 8px 0 16px;
+        margin: 12px 0;
+        background: white;
       }
-      .grid td {
+
+      .answer-grid td,
+      .cage-grid td {
         border: 1px solid #888;
         padding: 0;
-        width: 34px;
-        height: 34px;
+        width: 40px;
+        height: 40px;
       }
-      .grid input {
+
+      .answer-grid input {
         width: 100%;
         height: 100%;
         padding: 0;
@@ -47,13 +69,50 @@
         border: none;
         outline: none;
         font-size: 16px;
+        background: white;
       }
+
+      /* 笼子选择网格 */
+      .cage-grid td {
+        cursor: pointer;
+        transition: background 0.1s;
+        position: relative;
+      }
+
+      .cage-grid td.selected {
+        background: #5cb85c !important;
+        color: white;
+      }
+
+      .cage-grid td:hover {
+        background: #e8f4f8;
+      }
+
+      .cage-grid button.cell-btn {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: white;
+        padding: 0;
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .cage-grid td.selected button.cell-btn {
+        background: #5cb85c;
+        color: white;
+      }
+
       .button-row {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
         margin: 12px 0;
       }
+
       button {
         padding: 10px 16px;
         background: #337ab7;
@@ -61,74 +120,293 @@
         border: none;
         border-radius: 4px;
         cursor: pointer;
+        font-size: 14px;
       }
+
       button:hover {
         background: #286090;
       }
-      pre {
-        white-space: pre-wrap;
-        word-break: break-word;
-        background: #f7f7f7;
-        padding: 10px;
+
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      button.danger {
+        background: #d9534f;
+      }
+
+      button.danger:hover {
+        background: #c9302c;
+      }
+
+      button.success {
+        background: #5cb85c;
+      }
+
+      button.success:hover {
+        background: #4cae4c;
+      }
+
+      .step-box {
+        background: white;
+        padding: 16px;
         border-radius: 4px;
+        margin: 12px 0;
+        border-left: 4px solid #337ab7;
+      }
+
+      .step-box h2 {
+        margin-top: 0;
+        border-bottom: none;
+        padding-bottom: 0;
+        color: #337ab7;
+      }
+
+      .cages-list {
+        background: white;
+        padding: 12px;
+        border-radius: 4px;
+        margin: 12px 0;
         border: 1px solid #ddd;
       }
+
+      .cage-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        margin: 4px 0;
+        background: #f9f9f9;
+        border-radius: 4px;
+        border-left: 3px solid #5cb85c;
+      }
+
+      .cage-info {
+        font-size: 14px;
+      }
+
+      .cage-cells {
+        color: #666;
+        font-size: 12px;
+      }
+
       #status {
         margin-top: 16px;
+        padding: 12px;
+        border-radius: 4px;
+        display: none;
       }
+
+      #status.show {
+        display: block;
+      }
+
+      #status.success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      #status.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+
       .small {
         font-size: 0.9rem;
         color: #555;
       }
+
+      .cage-sum-row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+        margin: 12px 0;
+        flex-wrap: wrap;
+      }
+
+      .cage-sum-row input {
+        max-width: 200px;
+      }
+
+      .selected-count {
+        font-size: 14px;
+        color: #666;
+        padding: 8px;
+        background: #f0f0f0;
+        border-radius: 4px;
+        margin: 8px 0;
+      }
     </style>
   </head>
   <body>
-    <h1>数独题目录入</h1>
-    <p>请在下方输入数独题目数据，然后保存到数据库。</p>
+    <h1>数独题目生成器</h1>
+    <p>按步骤完成数独题目的创建。</p>
 
-    <label for="difficulty">难度（1-9）</label>
-    <input id="difficulty" type="number" min="1" max="9" value="1" />
+    <!-- 第一步：答案网格 -->
+    <div class="step-box">
+      <h2>第一步：输入答案网格</h2>
 
-    <label for="average_solving_time">平均解题耗时（秒，可选）</label>
-    <input id="average_solving_time" type="number" min="0" value="0" />
+      <label for="difficulty">难度（1-9）</label>
+      <input id="difficulty" type="number" min="1" max="9" value="1" />
 
-    <div class="grid">
-      <label>答案网格（空格表示未填）</label>
-      <table id="answer-grid"></table>
-      <button type="button" id="fill-answer-json">
-        同步答案到 Answer JSON
-      </button>
+      <label for="average_solving_time">平均解题耗时（秒）</label>
+      <input id="average_solving_time" type="number" min="0" value="0" />
+
+      <label for="created_at">创建时间（可选）</label>
+      <input id="created_at" type="datetime-local" />
+      <p class="small">
+        不填则默认使用当前时间，填入后将在数据库中保存该时间。
+      </p>
+
+      <div class="answer-grid">
+        <label>答案网格（9×9，空格表示未填）</label>
+        <table id="answer-grid"></table>
+        <div class="button-row">
+          <button type="button" id="fill-answer-json" class="success">
+            同步答案到 JSON
+          </button>
+          <button type="button" id="clear-answer-grid">清空答案网格</button>
+        </div>
+      </div>
+
+      <label for="answer_json">Answer JSON（81 个数字数组）</label>
+      <textarea
+        id="answer_json"
+        rows="4"
+        placeholder="可留空，或粘贴 JSON 数组"
+      ></textarea>
+      <p class="small">如果填入 Answer JSON，则忽略上方答案网格。</p>
     </div>
 
-    <label for="answer_json"
-      >Answer JSON（81 个数字数组，例如 [1,2,3,...]）</label
-    >
-    <textarea id="answer_json" rows="4" placeholder="可留空"></textarea>
+    <!-- 第二步：笼子编辑 -->
+    <div class="step-box">
+      <h2>第二步：编辑笼子数据</h2>
 
-    <label for="cages_json">笼子数据 JSON</label>
-    <textarea
-      id="cages_json"
-      rows="8"
-      placeholder='[{"id":1,"sum":23,"cells":[{"row":0,"col":0},{"row":0,"col":1}]}]'
-    ></textarea>
-    <p class="small">笼子数据必须是有效 JSON，cells 使用 row/col 位置。</p>
+      <div class="cage-grid">
+        <label>笼子编辑网格（点击格子选中，Shift+点击取消）</label>
+        <table id="cage-grid"></table>
+      </div>
 
-    <div class="button-row">
-      <button type="button" id="submit-button">保存题目</button>
-      <button type="button" id="reset-button">重置表单</button>
+      <div class="selected-count">
+        已选中 <strong id="selected-count">0</strong> 个格子
+      </div>
+
+      <div class="cage-sum-row">
+        <label for="cage-sum" style="margin: 0; display: inline-block">
+          笼子总和（数字）
+        </label>
+        <input
+          id="cage-sum"
+          type="number"
+          min="1"
+          placeholder="输入选中格子的数字总和"
+          style="max-width: 200px"
+        />
+        <button type="button" id="add-cage-button" class="success" disabled>
+          生成笼子
+        </button>
+      </div>
+
+      <div>
+        <label>笼子列表</label>
+        <div class="cages-list" id="cages-list">
+          <p style="color: #999">还未添加任何笼子</p>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button type="button" id="submit-button" class="success">
+          保存题目到数据库
+        </button>
+        <button type="button" id="reset-all-button">重置全部</button>
+      </div>
     </div>
 
     <div id="status"></div>
 
     <script>
-      const gridTable = document.getElementById("answer-grid");
-      const answerJsonInput = document.getElementById("answer_json");
-      const statusEl = document.getElementById("status");
+      const state = {
+        answerGrid: [],
+        selectedCells: new Set(),
+        cages: [],
+        cageIdCounter: 1,
+        cellToCage: new Map(), // key: "r,c", value: cageId
+        cageColors: new Map(), // key: cageId, value: hex color
+      };
 
-      function createGrid() {
-        for (let r = 0; r < 9; r += 1) {
+      const DOM = {
+        answerGrid: document.getElementById("answer-grid"),
+        cageGrid: document.getElementById("cage-grid"),
+        answerJson: document.getElementById("answer_json"),
+        cageSum: document.getElementById("cage-sum"),
+        selectedCount: document.getElementById("selected-count"),
+        cagesList: document.getElementById("cages-list"),
+        status: document.getElementById("status"),
+      };
+
+      function setStatus(message, isError = false) {
+        DOM.status.textContent = message;
+        DOM.status.classList.remove("success", "error");
+        DOM.status.classList.add("show", isError ? "error" : "success");
+      }
+
+      function clearStatus() {
+        DOM.status.classList.remove("show");
+      }
+
+      // 生成随机颜色
+      function generateRandomColor() {
+        const colors = [
+          "#FFB6C1", // 浅粉红
+          "#87CEEB", // 天蓝
+          "#90EE90", // 浅绿
+          "#FFD700", // 金色
+          "#FFA500", // 橙色
+          "#DDA0DD", // 梅紫
+          "#20B2AA", // 浅海洋绿
+          "#F08080", // 浅珊瑚色
+          "#98FB98", // 淡绿
+          "#FFDAB9", // 桃色
+          "#B0E0E6", // 粉蓝
+          "#F0E68C", // 卡其色
+          "#FFB6F0", // 浅紫红
+          "#A9A9FF", // 灰蓝
+          "#FFD4A3", // 浅橙
+        ];
+        return colors[Math.floor(Math.random() * colors.length)];
+      }
+
+      function updateCageGridVisuals() {
+        DOM.cageGrid.querySelectorAll("td").forEach((cell) => {
+          const btn = cell.querySelector(".cell-btn");
+          const key = `${btn.dataset.row},${btn.dataset.col}`;
+          const cageId = state.cellToCage.get(key);
+
+          if (cageId !== undefined) {
+            const color = state.cageColors.get(cageId);
+            cell.style.backgroundColor = color;
+            cell.style.cursor = "not-allowed";
+            btn.style.cursor = "not-allowed";
+            btn.style.opacity = "0.7";
+          } else {
+            cell.style.backgroundColor = "";
+            cell.style.cursor = "pointer";
+            btn.style.cursor = "pointer";
+            btn.style.opacity = "1";
+          }
+        });
+      }
+
+      // ====== 第一步：答案网格 ======
+
+      function createAnswerGrid() {
+        DOM.answerGrid.innerHTML = "";
+        for (let r = 0; r < 9; r++) {
           const row = document.createElement("tr");
-          for (let c = 0; c < 9; c += 1) {
+          for (let c = 0; c < 9; c++) {
             const cell = document.createElement("td");
             const input = document.createElement("input");
             input.type = "text";
@@ -141,93 +419,237 @@
             cell.appendChild(input);
             row.appendChild(cell);
           }
-          gridTable.appendChild(row);
+          DOM.answerGrid.appendChild(row);
         }
       }
 
-      function readGridAnswer() {
+      function readAnswerGrid() {
         const values = [];
-        const inputs = gridTable.querySelectorAll("input");
+        const inputs = DOM.answerGrid.querySelectorAll("input");
         inputs.forEach((input) => {
           const text = input.value.trim();
-          if (!text) {
-            values.push(0);
-          } else {
-            values.push(Number(text));
-          }
+          values.push(text ? Number(text) : 0);
         });
         return values;
-      }
-
-      function setStatus(message, isError = false) {
-        statusEl.textContent = message;
-        statusEl.style.color = isError ? "crimson" : "green";
       }
 
       document
         .getElementById("fill-answer-json")
         .addEventListener("click", () => {
-          const values = readGridAnswer();
-          answerJsonInput.value = JSON.stringify(values);
-          setStatus("已同步答案到 Answer JSON。");
+          const values = readAnswerGrid();
+          DOM.answerJson.value = JSON.stringify(values);
+          setStatus("已同步答案到 JSON");
         });
 
-      document.getElementById("reset-button").addEventListener("click", () => {
-        document.getElementById("difficulty").value = "1";
-        document.getElementById("average_solving_time").value = "0";
-        answerJsonInput.value = "";
-        document.getElementById("cages_json").value = "";
-        gridTable
-          .querySelectorAll("input")
-          .forEach((input) => (input.value = ""));
-        setStatus("表单已重置。", false);
-      });
+      document
+        .getElementById("clear-answer-grid")
+        .addEventListener("click", () => {
+          DOM.answerGrid
+            .querySelectorAll("input")
+            .forEach((input) => (input.value = ""));
+          setStatus("已清空答案网格");
+        });
+
+      // ====== 第二步：笼子编辑 ======
+
+      function createCageGrid() {
+        DOM.cageGrid.innerHTML = "";
+        for (let r = 0; r < 9; r++) {
+          const row = document.createElement("tr");
+          for (let c = 0; c < 9; c++) {
+            const cell = document.createElement("td");
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "cell-btn";
+            btn.textContent = "";
+            btn.dataset.row = String(r);
+            btn.dataset.col = String(c);
+
+            btn.addEventListener("click", (e) => {
+              e.preventDefault();
+              const key = `${r},${c}`;
+
+              // 如果格子已经属于某个笼子，不允许选择
+              if (state.cellToCage.has(key)) {
+                setStatus("该格子已属于某个笼子，请先删除该笼子", true);
+                return;
+              }
+
+              const isShiftClick = e.shiftKey;
+
+              if (isShiftClick && state.selectedCells.has(key)) {
+                state.selectedCells.delete(key);
+                cell.classList.remove("selected");
+              } else if (!isShiftClick) {
+                if (state.selectedCells.has(key)) {
+                  state.selectedCells.delete(key);
+                  cell.classList.remove("selected");
+                } else {
+                  state.selectedCells.add(key);
+                  cell.classList.add("selected");
+                }
+              }
+
+              updateSelectedCount();
+            });
+
+            cell.appendChild(btn);
+            row.appendChild(cell);
+          }
+          DOM.cageGrid.appendChild(row);
+        }
+        updateCageGridVisuals();
+      }
+
+      function updateSelectedCount() {
+        const count = state.selectedCells.size;
+        DOM.selectedCount.textContent = count;
+        document.getElementById("add-cage-button").disabled = count < 2;
+      }
+
+      document
+        .getElementById("add-cage-button")
+        .addEventListener("click", () => {
+          const sum = Number(DOM.cageSum.value);
+          if (!sum || sum < 1) {
+            setStatus("请输入有效的笼子总和", true);
+            return;
+          }
+
+          if (state.selectedCells.size < 2) {
+            setStatus("请至少选中 2 个格子", true);
+            return;
+          }
+
+          const cells = Array.from(state.selectedCells)
+            .map((key) => {
+              const [r, c] = key.split(",").map(Number);
+              return { row: r, col: c };
+            })
+            .sort((a, b) => (a.row === b.row ? a.col - b.col : a.row - b.row));
+
+          // 分配随机颜色
+          const color = generateRandomColor();
+
+          const cage = {
+            id: state.cageIdCounter++,
+            sum,
+            cells,
+            color,
+          };
+
+          // 标记这些格子已被占用
+          cells.forEach((cell) => {
+            const key = `${cell.row},${cell.col}`;
+            state.cellToCage.set(key, cage.id);
+          });
+          state.cageColors.set(cage.id, color);
+
+          state.cages.push(cage);
+          state.selectedCells.clear();
+          updateCagesList();
+          updateCageGridVisuals();
+          updateSelectedCount();
+          DOM.cageSum.value = "";
+
+          // 清除网格高亮
+          DOM.cageGrid.querySelectorAll("td.selected").forEach((td) => {
+            td.classList.remove("selected");
+          });
+
+          setStatus(`已添加笼子：和为 ${sum}，包含 ${cells.length} 个格子`);
+        });
+
+      function updateCagesList() {
+        if (state.cages.length === 0) {
+          DOM.cagesList.innerHTML =
+            '<p style="color: #999">还未添加任何笼子</p>';
+          return;
+        }
+
+        DOM.cagesList.innerHTML = state.cages
+          .map(
+            (cage) =>
+              `
+          <div class="cage-item">
+            <div>
+              <div class="cage-info" style="color: ${cage.color}">■ 笼子 #${cage.id}：和为 ${cage.sum}，${cage.cells.length} 个格子</div>
+              <div class="cage-cells">${cage.cells.map((c) => `(${c.row},${c.col})`).join(", ")}</div>
+            </div>
+            <button type="button" class="danger delete-cage-btn" data-cage-id="${cage.id}" style="padding: 6px 12px">删除</button>
+          </div>
+        `,
+          )
+          .join("");
+
+        // 绑定删除事件
+        DOM.cagesList.querySelectorAll(".delete-cage-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const cageId = Number(btn.dataset.cageId);
+            const cageToDelete = state.cages.find((c) => c.id === cageId);
+
+            if (cageToDelete) {
+              // 清除格子占用标记
+              cageToDelete.cells.forEach((cell) => {
+                const key = `${cell.row},${cell.col}`;
+                state.cellToCage.delete(key);
+              });
+              state.cageColors.delete(cageId);
+            }
+
+            state.cages = state.cages.filter((c) => c.id !== cageId);
+            updateCagesList();
+            updateCageGridVisuals();
+            setStatus(`已删除笼子 #${cageId}`);
+          });
+        });
+      }
+
+      // ====== 保存题目 ======
 
       async function submitPuzzle() {
         const difficulty =
           Number(document.getElementById("difficulty").value) || 1;
         const average_solving_time =
           Number(document.getElementById("average_solving_time").value) || 0;
-        const cages_json = document.getElementById("cages_json").value.trim();
-        const answer_json =
-          document.getElementById("answer_json").value.trim() || null;
 
-        if (!cages_json) {
-          setStatus("请填写笼子数据 JSON。", true);
-          return;
-        }
-
-        let parsedCages;
-        try {
-          parsedCages = JSON.parse(cages_json);
-        } catch (err) {
-          setStatus("笼子 JSON 格式错误：" + err.message, true);
-          return;
-        }
-
-        if (!Array.isArray(parsedCages)) {
-          setStatus("笼子数据必须是数组。", true);
-          return;
-        }
-
-        if (answer_json) {
+        // 优先使用手动填入的 Answer JSON，否则使用网格值
+        let answer_json = null;
+        const answerJsonInput = DOM.answerJson.value.trim();
+        if (answerJsonInput) {
           try {
-            const parsedAnswer = JSON.parse(answer_json);
-            if (!Array.isArray(parsedAnswer) || parsedAnswer.length !== 81) {
-              setStatus("Answer JSON 必须是长度为 81 的数组。", true);
+            const parsed = JSON.parse(answerJsonInput);
+            if (!Array.isArray(parsed) || parsed.length !== 81) {
+              setStatus("Answer JSON 必须是长度为 81 的数组", true);
               return;
             }
+            answer_json = answerJsonInput;
           } catch (err) {
             setStatus("Answer JSON 格式错误：" + err.message, true);
             return;
           }
         }
 
+        if (state.cages.length === 0) {
+          setStatus("请至少添加一个笼子", true);
+          return;
+        }
+
+        // 过滤笼子数据，去除前端只用的 color 字段
+        const cages_for_submit = state.cages.map((cage) => ({
+          id: cage.id,
+          sum: cage.sum,
+          cells: cage.cells,
+        }));
+        const cages_json = JSON.stringify(cages_for_submit);
+
+        const created_at = document.getElementById("created_at").value.trim();
         const payload = {
           difficulty,
           average_solving_time,
-          cages_json: JSON.stringify(parsedCages),
-          answer_json: answer_json ? answer_json : null,
+          created_at: created_at || null,
+          cages_json,
+          answer_json: answer_json || null,
         };
 
         setStatus("正在保存，请稍候...");
@@ -246,7 +668,14 @@
             throw new Error(data.error || "保存失败");
           }
 
-          setStatus("保存成功，题目 ID：" + data.puzzle_id);
+          setStatus(
+            `保存成功！题目 ID：${data.puzzle_id}，难度：${difficulty}，笼子数：${state.cages.length}`,
+          );
+
+          // 可选：清空表单
+          setTimeout(() => {
+            document.getElementById("reset-all-button").click();
+          }, 2000);
         } catch (err) {
           setStatus("保存失败：" + err.message, true);
         }
@@ -256,7 +685,34 @@
         .getElementById("submit-button")
         .addEventListener("click", submitPuzzle);
 
-      createGrid();
+      document
+        .getElementById("reset-all-button")
+        .addEventListener("click", () => {
+          document.getElementById("difficulty").value = "1";
+          document.getElementById("average_solving_time").value = "0";
+          DOM.answerJson.value = "";
+          DOM.cageSum.value = "";
+          state.selectedCells.clear();
+          state.cages = [];
+          state.cageIdCounter = 1;
+          state.cellToCage.clear();
+          state.cageColors.clear();
+          updateSelectedCount();
+          updateCagesList();
+          createAnswerGrid();
+          createCageGrid();
+          DOM.cageGrid
+            .querySelectorAll("td.selected")
+            .forEach((td) => td.classList.remove("selected"));
+          clearStatus();
+          setStatus("已重置全部数据");
+        });
+
+      // 初始化
+      createAnswerGrid();
+      createCageGrid();
+      updateCagesList();
+      updateSelectedCount();
     </script>
   </body>
 </html>
