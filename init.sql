@@ -171,3 +171,8 @@ INSERT INTO game_records (openid, puzzle_id, difficulty, cell_values_json, elaps
 
 INSERT INTO game_records (openid, puzzle_id, difficulty, cell_values_json, elapsed_seconds, completed, disabled_hints_json, created_at) VALUES
 ('test_openid_123', 3, 8, '[[[4]],[[6]],[[2]],[[8]],[[1]],[[3]],[[7]],[[5]],[[9]]]', 1200, 0, '[]', DATE_SUB(NOW(), INTERVAL 1 DAY));
+
+
+
+
+

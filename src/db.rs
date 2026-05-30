@@ -465,6 +465,8 @@ pub async fn save_game_record(
         None => { 0 }
     };
 
+    log::info!("[DB] _elapsed_seconds: {}, elapsed_seconds: {}", _elapsed_seconds, elapsed_seconds);
+
     // 状态为已完成，且前后两次用时不一样才算一次记录。 // TODO 待优化
     if completed && (_elapsed_seconds != elapsed_seconds) {
         let experience_to_add = exp;

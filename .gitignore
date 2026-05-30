@@ -1,3 +1,5 @@
 target/
 docker-build/
 node_modules
+
+my_puzzles_*.json
