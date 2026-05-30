@@ -109,6 +109,8 @@ pub struct SearchPuzzlesRequest {
     pub id: Option<i64>,
     pub level: [i32; 2],
     pub openid: Option<String>,
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
 }
 
 // ==================== Game record models ====================
@@ -151,4 +153,11 @@ pub struct GameRecordDetail {
     pub elapsed_seconds: i64,
     pub completed: bool,
     pub created_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetRecordsQuery {
+    pub openid: Option<String>,
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
 }

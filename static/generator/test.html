@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <title>杀手数独生成器示例</title>
+  </head>
+  <body>
+    <h1>我的杀手数独游戏</h1>
+    <div id="sudoku-output"></div>
+
+    <!-- 1. 引入刚刚打包好的 JS 文件 -->
+    <script src="./killer-sudoku-bundle.js"></script>
+
+    <!-- 2. 编写调用逻辑 -->
+    <script>
+      // 现在可以通过全局变量 killerSudoku 访问库的所有功能了
+      // 生成一个中等难度的谜题
+      const sudoku = killerSudoku.generateKillerSudoku("medium");
+
+      // 打印结果到控制台查看
+      console.log("谜题盘面:", sudoku.puzzle);
+      console.log("答案盘面:", sudoku.solution);
+      console.log("分区信息:", sudoku.areas);
+      console.log("难度:", sudoku.difficulty);
+
+      // 在页面上简单展示，方便测试
+      const outputDiv = document.getElementById("sudoku-output");
+      outputDiv.innerHTML = `
+            <h3>生成的谜题（0代表空格）：</h3>
+            <pre>${JSON.stringify(sudoku.puzzle, null, 2)}</pre>
+            <h3>答案：</h3>
+            <pre>${JSON.stringify(sudoku.solution, null, 2)}</pre>
+        `;
+    </script>
+  </body>
+</html>

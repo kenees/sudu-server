@@ -307,8 +307,11 @@ pub async fn search_puzzles(
     puzzle_id: Option<i64>,
     level: Option<(i32, i32)>,
     openid: Option<&str>,
+    page: i64,
+    page_size: i64,
 ) -> Result<Vec<(i64, i32, i64, String, Option<i64>, bool)>, sqlx::Error> {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let offset = (page - 1).max(0) * page_size;
 
     let query = if let Some(id) = puzzle_id {
         sqlx::query_as::<_, (i64, i32, i64, String, String)>(
@@ -317,10 +320,13 @@ pub async fn search_puzzles(
             FROM puzzles
             WHERE id = ? AND DATE(created_at) <= ?
             ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
             "#,
         )
         .bind(id)
         .bind(&today)
+        .bind(page_size)
+        .bind(offset)
     } else {
         if let Some((min, max)) = level {
             sqlx::query_as::<_, (i64, i32, i64, String, String)>(
@@ -330,11 +336,14 @@ pub async fn search_puzzles(
                 WHERE difficulty BETWEEN ? AND ? 
                     AND DATE(created_at) <= ?
                 ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
                 "#,
             )
             .bind(min)
             .bind(max)
             .bind(&today)
+            .bind(page_size)
+            .bind(offset)
         } else {
             sqlx::query_as::<_, (i64, i32, i64, String, String)>(
                   r#"
@@ -342,8 +351,12 @@ pub async fn search_puzzles(
                 FROM puzzles
                 WHERE DATE(created_at) <= ?
                 ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
                 "#,
             )
+            .bind(&today)
+            .bind(page_size)
+            .bind(offset)
         }
     };
 
@@ -396,9 +409,9 @@ pub async fn save_game_record(
     let mut tx: Transaction<'_, MySql> = pool.begin().await?;
 
     // 1. 查询是否存在记录（注意 &mut tx）
-    let existing: Option<(i64,)> = sqlx::query_as(
+    let existing: Option<(i64, i64, bool)> = sqlx::query_as(
         r#"
-        SELECT id FROM game_records
+        SELECT id, elapsed_seconds, completed FROM game_records
         WHERE openid = ? AND puzzle_id = ?
         LIMIT 1
         "#,
@@ -409,7 +422,7 @@ pub async fn save_game_record(
     .await?;
 
     let record_id = match existing {
-        Some((record_id,)) => {
+        Some((record_id, _, __)) => {
             sqlx::query(
                 r#"
                 UPDATE game_records
@@ -447,7 +460,13 @@ pub async fn save_game_record(
         }
     };
 
-    if completed {
+    let _elapsed_seconds = match existing {
+        Some((id, elapsed_seconds, completed)) =>  { elapsed_seconds }
+        None => { 0 }
+    };
+
+    // 状态为已完成，且前后两次用时不一样才算一次记录。 // TODO 待优化
+    if completed && (_elapsed_seconds != elapsed_seconds) {
         let experience_to_add = exp;
         update_user_game_data(&mut tx, openid, elapsed_seconds, Some(difficulty as i32), experience_to_add).await?;
     }
@@ -460,7 +479,12 @@ pub async fn save_game_record(
 pub async fn get_user_records(
     pool: &MySqlPool,
     openid: &str,
+    page: i64,
+    page_size: i64,
 ) -> Result<Vec<(i64, i64, i32, i64, bool, String, i64, String)>, sqlx::Error> {
+    let offset = (page - 1).max(0) * page_size;
+
+    log::info!("[DB] get_user_records: openid={}, page={}, page_size={}, offset={}", openid, page, page_size, offset);
     let rows: Vec<(i64, i64, i32, i64, bool, String, String)> = sqlx::query_as(
         r#"
         SELECT
@@ -475,9 +499,12 @@ pub async fn get_user_records(
         LEFT JOIN puzzles p ON gr.puzzle_id = p.id
         WHERE gr.openid = ?
         ORDER BY gr.created_at DESC
+        LIMIT ? OFFSET ?
         "#,
     )
     .bind(openid)
+    .bind(page_size)
+    .bind(offset)
     .fetch_all(pool)
     .await?;
 

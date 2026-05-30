@@ -8,9 +8,9 @@ use sqlx::MySqlPool;
 use std::env;
 
 use crate::models::{
-    CreatePuzzleRequest, CreatePuzzleResponse, SaveGameRecordRequest, SaveGameRecordResponse,
-    SearchPuzzlesRequest, UpdateProfileRequest, UpdateProfileResponse, UserInfo,
-    WeChatLoginRequest, WeChatLoginResponse,
+    CreatePuzzleRequest, CreatePuzzleResponse, GetRecordsQuery, SaveGameRecordRequest,
+    SaveGameRecordResponse, SearchPuzzlesRequest, UpdateProfileRequest, UpdateProfileResponse,
+    UserInfo, WeChatLoginRequest, WeChatLoginResponse,
 };
 
 const WECHAT_API_URL: &str = "https://api.weixin.qq.com/sns/jscode2session";
@@ -474,8 +474,18 @@ pub async fn search_puzzles(
         None => Some(token_openid.as_str()),
     };
 
-    match crate::db::search_puzzles(&pool, body.id, Some((body.level[0], body.level[1])), openid)
-        .await
+    let page = body.page.unwrap_or(1).max(1);
+    let page_size = body.page_size.unwrap_or(10).clamp(1, 100);
+
+    match crate::db::search_puzzles(
+        &pool,
+        body.id,
+        Some((body.level[0], body.level[1])),
+        openid,
+        page,
+        page_size,
+    )
+    .await
     {
         Ok(puzzles) => {
             let items: Vec<serde_json::Value> = puzzles
@@ -613,15 +623,15 @@ pub async fn save_game_record(
 pub async fn get_user_records(
     req: HttpRequest,
     pool: web::Data<MySqlPool>,
-    query: web::Query<serde_json::Value>,
+    query: web::Query<GetRecordsQuery>,
 ) -> HttpResponse {
     let token_openid = match require_auth_openid(&req) {
         Ok(openid) => openid,
         Err(resp) => return resp,
     };
 
-    let openid = match query.get("openid").and_then(|v| v.as_str()) {
-        Some(o) if o != token_openid => {
+    let openid = match &query.openid {
+        Some(o) if *o != token_openid => {
             return HttpResponse::Unauthorized().json(serde_json::json!({
                 "error": "openid mismatch"
             }));
@@ -630,8 +640,17 @@ pub async fn get_user_records(
         None => token_openid.clone(),
     };
 
-    match crate::db::get_user_records(&pool, &openid).await {
+    let page = query.page.unwrap_or(1).max(1);
+    let page_size = query.page_size.unwrap_or(10).clamp(1, 100);
+
+    log::info!("Full query params: {:?}", query);
+    log::info!("get user records: page={}, page_size={}", page, page_size);
+
+    match crate::db::get_user_records(&pool, &openid, page, page_size).await {
         Ok(records) => {
+            // 保存原始记录数（用于前端判断是否还有更多）
+            let total_count = records.len() as i64;
+
             // Group by date
             let mut groups: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
                 std::collections::BTreeMap::new();
@@ -653,11 +672,6 @@ pub async fn get_user_records(
                     4..=6 => "中等",
                     _ => "困难",
                 };
-                // let time_min = elapsed / 60;
-                // let time_sec = elapsed % 60;
-
-                // let avg_time_min = avg_time / 60;
-                // let avg_time_sec = avg_time % 60;
 
                 let entry = serde_json::json!({
                     "id": puzzle_id,
@@ -666,14 +680,14 @@ pub async fn get_user_records(
                     "difficulty_label": diff_label,
                     "difficulty": difficulty,
                     "time": avg_time,
-                    "personalTime": elapsed,
+                    "personal_time": elapsed,
                     "completed": completed,
                 });
 
                 groups.entry(date).or_default().push(entry);
             }
 
-            let result: Vec<serde_json::Value> = groups
+            let items: Vec<serde_json::Value> = groups
                 .into_iter()
                 .map(|(date, items)| {
                     serde_json::json!({
@@ -682,6 +696,14 @@ pub async fn get_user_records(
                     })
                 })
                 .collect();
+
+            // 返回带有元数据的结构
+            let result = serde_json::json!({
+                "data": items,
+                "total_count": total_count,
+                "page": page,
+                "page_size": page_size,
+            });
 
             HttpResponse::Ok().json(result)
         }

@@ -239,9 +239,23 @@
         border-radius: 4px;
         margin: 8px 0;
       }
+
+      #model {
+        width: 400px;
+        height: 400px;
+        display: block;
+      }
     </style>
   </head>
   <body>
+    <div id="model">
+      <code>
+        var arr = []; var cells = document.getElementsByClassName("cell");
+        for(var i =0;i < 81; i++) { var v = cells[i].firstChild.innerHTML
+        arr.push(Number(v)) }; console.log(arr);
+      </code>
+    </div>
+
     <h1>数独题目生成器</h1>
     <p>按步骤完成数独题目的创建。</p>
 
@@ -260,6 +274,8 @@
       <p class="small">
         不填则默认使用当前时间，填入后将在数据库中保存该时间。
       </p>
+
+      <!-- <button type="button" id="auto-create">自动生成</button> -->
 
       <div class="answer-grid">
         <label>答案网格（9×9，空格表示未填）</label>
@@ -326,7 +342,7 @@
     </div>
 
     <div id="status"></div>
-
+    <!-- <script src="./killer-sudoku-bundle.js"></script> -->
     <script>
       const state = {
         answerGrid: [],
@@ -507,58 +523,65 @@
         document.getElementById("add-cage-button").disabled = count < 2;
       }
 
+      function addCageButton() {
+        const sum = Number(DOM.cageSum.value);
+        if (!sum || sum < 1) {
+          setStatus("请输入有效的笼子总和", true);
+          return;
+        }
+
+        if (state.selectedCells.size < 2) {
+          setStatus("请至少选中 2 个格子", true);
+          return;
+        }
+
+        console.log(state.selectedCells);
+        const cells = Array.from(state.selectedCells)
+          .map((key) => {
+            const [r, c] = key.split(",").map(Number);
+            return { row: r, col: c };
+          })
+          .sort((a, b) => (a.row === b.row ? a.col - b.col : a.row - b.row));
+
+        console.log(cells);
+        // 分配随机颜色
+        const color = generateRandomColor();
+
+        const cage = {
+          id: state.cageIdCounter++,
+          sum,
+          cells,
+          color,
+        };
+
+        // 标记这些格子已被占用
+        cells.forEach((cell) => {
+          const key = `${cell.row},${cell.col}`;
+          state.cellToCage.set(key, cage.id);
+        });
+        state.cageColors.set(cage.id, color);
+
+        state.cages.push(cage);
+        state.selectedCells.clear();
+
+        console.log(state);
+
+        updateCagesList();
+        updateCageGridVisuals();
+        updateSelectedCount();
+        DOM.cageSum.value = "";
+
+        // 清除网格高亮
+        DOM.cageGrid.querySelectorAll("td.selected").forEach((td) => {
+          td.classList.remove("selected");
+        });
+
+        setStatus(`已添加笼子：和为 ${sum}，包含 ${cells.length} 个格子`);
+      }
+
       document
         .getElementById("add-cage-button")
-        .addEventListener("click", () => {
-          const sum = Number(DOM.cageSum.value);
-          if (!sum || sum < 1) {
-            setStatus("请输入有效的笼子总和", true);
-            return;
-          }
-
-          if (state.selectedCells.size < 2) {
-            setStatus("请至少选中 2 个格子", true);
-            return;
-          }
-
-          const cells = Array.from(state.selectedCells)
-            .map((key) => {
-              const [r, c] = key.split(",").map(Number);
-              return { row: r, col: c };
-            })
-            .sort((a, b) => (a.row === b.row ? a.col - b.col : a.row - b.row));
-
-          // 分配随机颜色
-          const color = generateRandomColor();
-
-          const cage = {
-            id: state.cageIdCounter++,
-            sum,
-            cells,
-            color,
-          };
-
-          // 标记这些格子已被占用
-          cells.forEach((cell) => {
-            const key = `${cell.row},${cell.col}`;
-            state.cellToCage.set(key, cage.id);
-          });
-          state.cageColors.set(cage.id, color);
-
-          state.cages.push(cage);
-          state.selectedCells.clear();
-          updateCagesList();
-          updateCageGridVisuals();
-          updateSelectedCount();
-          DOM.cageSum.value = "";
-
-          // 清除网格高亮
-          DOM.cageGrid.querySelectorAll("td.selected").forEach((td) => {
-            td.classList.remove("selected");
-          });
-
-          setStatus(`已添加笼子：和为 ${sum}，包含 ${cells.length} 个格子`);
-        });
+        .addEventListener("click", () => addCageButton());
 
       function updateCagesList() {
         if (state.cages.length === 0) {
@@ -717,6 +740,29 @@
       createCageGrid();
       updateCagesList();
       updateSelectedCount();
+
+      //   document.getElementById("auto-create").addEventListener("click", () => {
+      //     console.log(killerSudoku);
+      //     killerSudoku.overrideNumberOfCellsToRemove("medium", 68);
+      //     const sudoku = killerSudoku.generateKillerSudoku("medium");
+      //     console.log(sudoku);
+      //     const _answer = sudoku.solution.split("");
+      //     // set answer
+      //     const inputs = DOM.answerGrid.querySelectorAll("input");
+      //     inputs.forEach((input, i) => {
+      //       input.value = Number(_answer[i]);
+      //     });
+      //     // set cage
+      //     for (let i = 0; i < sudoku.areas.length; i++) {
+      //       DOM.cageSum.value = sudoku.areas[i].sum;
+      //       let set = new Set();
+      //       sudoku.areas[i].cells.forEach((v) => {
+      //         set.add(v.join(","));
+      //       });
+      //       state.selectedCells = set;
+      //       addCageButton();
+      //     }
+      //   });
     </script>
   </body>
 </html>
