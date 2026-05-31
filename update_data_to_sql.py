@@ -22,7 +22,7 @@ DB_CONFIG = {
     'charset': 'utf8mb4'
 }
 
-JSON_FILE = 'my_puzzles_1.json'     # JSON 文件路径
+JSON_FILE = 'my_puzzles_3.json'     # JSON 文件路径
 TABLE_NAME = 'puzzles'         # 目标表名
 
 # 批量插入的批次大小（根据内存和网络调整，建议 500~2000）
